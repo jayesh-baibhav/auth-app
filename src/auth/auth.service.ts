@@ -36,25 +36,33 @@ export class AuthService {
         return user;
     }
 
-    async validateOAuthLogin(email: string, provider: string) {
-        let user = await this.usersService.findByEmail(email);
+    async validateOAuthLogin(thirdPartyId: string, provider: string, profile: any) {
+        let user = await this.usersService.findByEmail(profile.email);
 
         if (user) {
-            // ✅ Ensure user is logging in with the correct provider
             if (user.provider !== provider) {
                 throw new BadRequestException(
                     `User already exists with ${user.provider}. Please log in with ${user.provider}.`
                 );
             }
 
-            console.log(`✅ User found with ${provider} login`);
+            const userId = user._id.toString();
+            user = await this.usersService.updateUser(userId, {
+                emailVerified: true,
+                profile: {
+                    name: profile.name,
+                    picture: profile.picture
+                }
+            });
+
+            console.log(`✅ Updated existing user profile for ${provider} login`);
             return user;
         }
 
         console.log(`🔍 No existing user found. Creating new user with ${provider}`);
 
-        // ✅ Explicitly pass `null` as password for Google/Facebook users
-        return await this.usersService.createUser(email, null, provider);
+        // Create new user with correct argument count
+        return await this.usersService.createUser(profile.email, null, provider);
     }
 
 

@@ -1,39 +1,46 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import * as cookieParser from 'cookie-parser';
-import { ValidationPipe } from '@nestjs/common';
-import * as dotenv from 'dotenv';
-import * as cookie from '@fastify/cookie';
-
-dotenv.config();
+import * as fastifyCookie from '@fastify/cookie';
+import * as fastifySession from '@fastify/secure-session'; // or @fastify/session if preferred
+import { join } from 'path';
+import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
+  const fastifyAdapter = new FastifyAdapter();
+  // Register necessary Fastify plugins
+  await fastifyAdapter.register(fastifyCookie);
+  await fastifyAdapter.register(fastifySession, {
+    key: Buffer.from('11ac4b87b3b27b5d0b15ba4596abf6cc784a22440539369239c94b8d7bf52b23', 'hex'),
+    cookie: {
+      path: '/',
+      httpOnly: true,
+    },
+  });
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true }),
+    fastifyAdapter,
   );
 
-  // Enable CORS (important for frontend interaction)
+  // Enable CORS if needed
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: 'http://localhost:3000',
     credentials: true,
   });
 
-  // Middleware for parsing cookies
-  app.use(cookieParser());
+  // Global prefix and configuration if needed
+  app.setGlobalPrefix('api');
 
-  // Global Validation Pipes for request validation
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+  // Use session middleware if not already handled by Fastify plugins
+  // For Passport to work, the session must be available
+  app.use((req, res, next) => {
+    // For Fastify with secure-session, req.session should be already attached.
+    next();
+  });
 
-  //✅ Register Fastify Cookie Plugin
-  await app.register(cookie);
-
-  // Start the server on the specified PORT
-  const PORT = process.env.PORT || 3000;
-  await app.listen(PORT, '0.0.0.0');
-
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  const configService = app.get(ConfigService);
+  const port = configService.get<number>('PORT') || 5000;
+  await app.listen(port, '0.0.0.0');
 }
-
 bootstrap();

@@ -1,11 +1,22 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types, Schema as MongooseSchema } from 'mongoose';
+import { Types, Schema as MongooseSchema, Document } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { Role } from '../common/enums/role.enum';
 
-export type UserDocument = User & Document & {
-    validatePassword: (password: string) => Promise<boolean>;
-};
+export interface UserDocument extends Document {
+    _id: Types.ObjectId;
+    email: string;
+    password: string;
+    roles: Role[];
+    emailVerified: boolean;
+    provider: string;
+    thirdPartyId: string;
+    profile: {
+        name: string;
+        picture: string;
+    };
+    validatePassword(password: string): Promise<boolean>;
+}
 
 @Schema({ timestamps: true })
 export class User {
@@ -20,7 +31,7 @@ export class User {
         required: false,
         default: null
     })
-    password: string | null;
+    password: any;
 
     @Prop({ type: [String], default: [Role.USER] })
     roles: Role[];
@@ -30,44 +41,40 @@ export class User {
 
     @Prop({ type: String, enum: ['local', 'google', 'facebook'], default: 'local' })
     provider: string;
+
+    @Prop({ type: String })
+    thirdPartyId: string;
+
+    @Prop({
+        type: {
+            name: String,
+            picture: String
+        },
+        required: false
+    })
+    profile: {
+        name: string;
+        picture: string;
+    };
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-
-// ✅ Hash password before saving
-UserSchema.pre<UserDocument>('save', async function (next) {
-    // Skip if password not modified or is null (OAuth case)
-    if (!this.isModified('password') || !this.password) return next();
-
-    // Only hash password for local auth users
+UserSchema.pre('save', async function (next) {
+    if (!this.isModified('password') || !this.password)
+        return next();
     if (this.provider === 'local') {
         this.password = await bcrypt.hash(this.password, 10);
     }
     next();
 });
 
-
-// ✅ Attach validatePassword method to schema
-UserSchema.methods.validatePassword = async function (password: string) {
-    console.log(`🔍 Received password for comparison (raw input): '${password}'`);
-    console.log(`🔍 Stored hashed password in DB: '${this.password}'`);
-    console.log(`🔍 Provider: '${this.provider}'`);
-
-    // ✅ If the user signed up with Google/Facebook, they don’t have a password
+UserSchema.methods.validatePassword = async function (password: string): Promise<boolean> {
     if (!this.password) {
         console.log(`❌ Skipping password validation. User is registered via ${this.provider}.`);
         return false;
     }
-
-    // ✅ Trim any extra spaces (for safety)
     const trimmedPassword = password.trim();
-
-    // ✅ Compare passwords
     const isMatch = await bcrypt.compare(trimmedPassword, this.password);
-    console.log(`✅ Password comparison result:`, isMatch);
-
     return isMatch;
 };
-
-

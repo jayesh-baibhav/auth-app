@@ -1,84 +1,53 @@
-import {
-    Controller,
-    Post,
-    Get,
-    Request,
-    UseGuards,
-    Response,
-    Body,
-    Param,
-    Req,
-    Res
-} from '@nestjs/common';
+import { Request, Response } from 'express';
+import { Controller, Get, Post, UseGuards, Body, Param, Req, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './local-auth.guard';
 import { FastifyReply } from 'fastify';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { FacebookAuthGuard } from './guards/facebook-auth.guard';
+import { AuthGuard } from '@nestjs/passport';
 
 @Controller('auth')
 export class AuthController {
-    constructor(private authService: AuthService) { }
+    constructor(private readonly authService: AuthService) { }
 
-
-    /**
-     * ✅ Register a new user
-     */
     @Post('register')
     async register(@Body() registerDto: { email: string; password: string }) {
         await this.authService.register(registerDto.email, registerDto.password);
         return { message: 'User registered successfully' };
     }
 
-    /**
-     * ✅ Login user and set JWT cookie
-     */
     @UseGuards(LocalAuthGuard)
     @Post('login')
-    async login(@Request() req, @Response() res: FastifyReply) {
+    async login(@Req() req: Request, @Res() res: FastifyReply) {
         const { jwt } = await this.authService.login(req.user);
-
-        // ✅ Use `setCookie()` for Fastify
         res.setCookie('jwt', jwt, {
             httpOnly: true,
-            secure: false, // Set to `true` in production
+            secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
             path: '/',
         });
-
-        return res.send({ message: 'Login successful' });
+        res.status(200).send({ message: 'Login successful' });
     }
 
-    /**
-     * ✅ Logout user (Clear JWT cookie)
-     */
     @Post('logout')
-    async logout(@Response() res: FastifyReply) {
+    async logout(@Res() res: FastifyReply) {
         res.clearCookie('jwt', { path: '/' });
-        return res.send({ message: 'Logout successful' });
+        res.status(200).send({ message: 'Logout successful' });
     }
 
-    /**
-     * ✅ Forgot password (Send password reset link)
-     */
     @Post('forgot-password')
     async forgotPassword(@Body() forgotDto: { email: string }) {
         await this.authService.forgotPassword(forgotDto.email);
         return { message: 'Password reset link sent to email' };
     }
 
-    /**
-     * ✅ Reset password using token
-     */
     @Post('reset-password')
     async resetPassword(@Body() resetDto: { token: string; newPassword: string }) {
         await this.authService.resetPassword(resetDto.token, resetDto.newPassword);
         return { message: 'Password has been reset successfully' };
     }
 
-    /**
-     * ✅ Verify email using token
-     */
     @Get('verify-email/:token')
     async verifyEmail(@Param('token') token: string) {
         await this.authService.verifyEmail(token);
@@ -87,44 +56,40 @@ export class AuthController {
 
     @Get('google')
     @UseGuards(GoogleAuthGuard)
-    async googleAuth() {
-        // Guard will handle the redirect
+    async googleAuth(@Res() res: FastifyReply) {
+        res.status(200);
     }
 
     @Get('google/callback')
     @UseGuards(GoogleAuthGuard)
-    async googleAuthCallback(@Req() req, @Res() res: FastifyReply) {
-        const token = await this.authService.generateToken(req.user);
-        res.setCookie('jwt', token, {
+    async googleAuthRedirect(@Req() req: Request, @Res() res: FastifyReply) {
+        const { jwt } = await this.authService.login(req.user);
+        res.setCookie('jwt', jwt, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production'
-        });
-        return res.redirect('/dashboard');
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/',
+        }).redirect(process.env.FRONTEND_URL || 'http://localhost:3000');
     }
 
 
     @Get('facebook')
     @UseGuards(FacebookAuthGuard)
-    async facebookAuth(@Res() res: FastifyReply) {
-        return res.send({ msg: 'Facebook Authentication' });
-    }
+    async facebookAuth() { }
 
     @Get('facebook/callback')
     @UseGuards(FacebookAuthGuard)
-    async facebookAuthCallback(@Req() req, @Res() res: FastifyReply) {
+    async facebookAuthCallback(@Req() req: Request, @Res() res: FastifyReply) {
         const { jwt } = await this.authService.login(req.user);
-
         res.setCookie('jwt', jwt, {
             httpOnly: true,
-            secure: false,
+            secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
             path: '/',
         });
-
-        return res.send({
+        res.status(200).send({
             message: 'Facebook auth successful',
-            user: req.user
+            user: req.user,
         });
     }
-
 }
