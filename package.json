@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
+    "@fastify/express": "^4.0.2",
     "@fastify/secure-session": "^8.1.1",
     "@fastify/session": "^11.1.0",
     "@nestjs/common": "^11.0.1",
