@@ -24,6 +24,17 @@ async function bootstrap() {
     },
   });
 
+  fastifyInstance.addHook('onRequest', (request, reply, done) => {
+    (reply as any).setHeader = function (key: string, value: string) {
+      return this.header(key, value);
+    };
+    (reply as any).end = function () {
+      return this.send();
+    };
+    (request as any).res = reply;
+    done();
+  });
+
   app.enableCors({
     origin: 'http://localhost:3000',
     credentials: true,
@@ -32,7 +43,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT') || 5000;
+  const port = configService.get<number>('PORT') || 3001;
   await app.listen(port, '0.0.0.0');
 }
 bootstrap();
